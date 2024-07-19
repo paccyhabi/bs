@@ -5,10 +5,10 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
 const db = mysql.createConnection({
-    host: 'baizb0rtpbpv1jcgkepo-mysql.services.clever-cloud.com',
-    user: 'urh9jfaitvskqwmk',
-    password: 'ioPmSsidC2oWWoveVY4x',
-    database: 'baizb0rtpbpv1jcgkepo'
+    host: 'bjexna1cudqh5njhcpi7-mysql.services.clever-cloud.com',
+    user: 'uug4ww6k5zi36gp1',
+    password: 'PhjFkvfh7qF1jnK9gWdQ',
+    database: 'bjexna1cudqh5njhcpi7'
 });
 
 db.connect(err => {
@@ -21,234 +21,140 @@ app.get("/api/test", function (req, res) {
 });
 
 app.post('/ussd', (req, res) => {
-    // Read the variables sent via POST from our API
-    const {
-        sessionId,
-        serviceCode,
-        phoneNumber,
-        text,
-    } = req.body;
+    const { sessionId, serviceCode, phoneNumber, text } = req.body;
 
     let response = '';
-    let candidate = '';
-    let language = ''; 
+    let language = '';
+    const textArray = text.split('*');
 
-    if (text == '') {
-        // This is the first request. Note how we start the response with CON
-        response = `CON Welcome to voting system!
-           Murakaza neza kurubuga rw'amatora!
-        1. Kinyarwanda
-        2. English`;
+    if (textArray.length === 1 && textArray[0] === '') {
+        response = `CON Welcome to Bus Ticketing System
+1. English
+2. Kinyarwanda`;
         sendResponse(res, response);
-    } else if (text == '1') {
-        // Business logic for first level response
-        response = `CON Hitamo Umukandida
-        1. Kamanzi Eric
-        2. Habimana Yves
-        3. Itangishaka Claude
-        4. Umwali Aliance`;
-        sendResponse(res, response);
-    } else if (text == '2') {
-        response = `CON Select candidate
-        1. Kamanzi Eric
-        2. Habimana Yves
-        3. Itangishaka Claude
-        4. Umwali Aliance`;
-        sendResponse(res, response);
+    } else if (textArray.length === 2 && (textArray[0] === '1' || textArray[0] === '2')) {
+        language = textArray[0] === '1' ? 'english' : 'kinyarwanda';
+        db.query('SELECT * FROM routes', (err, results) => {
+            if (err) {
+                console.error('Error fetching routes:', err.message);
+                response = language === 'english' 
+                    ? 'END Error fetching routes. Please try again later.'
+                    : 'END Ikosa ryo gufata amakuru. Ongera ugerageze nyuma.';
+                sendResponse(res, response);
+                return;
+            }
 
-        //FOR KINYARWANDA LANGUAGE
-    } else if (text == '1*1') {
-        candidate = 'Kamanzi Eric';
-        response = `CON Emeza gutora ${candidate}
-            1.Yego
-            2.Oya`;
-        sendResponse(res, response);
-    } else if (text == '1*2') {
-        candidate = 'Habimana Yves';
-        response = `CON Emeza gutora ${candidate}
-            1.Yego
-            2.Oya`;
-        sendResponse(res, response);
-    } else if (text == '1*3') {
-        candidate = 'Itangishaka Claude';
-        response = `CON Emeza gutora ${candidate}
-            1.Yego
-            2.Oya`;
-        sendResponse(res, response);
-    } else if (text == '1*4') {
-        candidate = 'Umwali Aliance';
-        response = `CON Emeza gutora ${candidate}
-            1.Yego
-            2.Oya`;
-        sendResponse(res, response);
+            response = language === 'english' ? 'CON Select a route:\n' : 'CON Hitamo urugendo:\n';
+            results.forEach((route, index) => {
+                response += `${index + 1}. ${route.start_location} to ${route.end_location} - ${route.fare}\n`;
+            });
+            sendResponse(res, response);
+        });
+    } else if (textArray.length === 3) {
+        const routeIndex = parseInt(textArray[1], 10) - 1;
+        db.query('SELECT * FROM routes', (err, results) => {
+            if (err || routeIndex >= results.length) {
+                response = 'END Invalid route selection. Please try again.';
+                sendResponse(res, response);
+                return;
+            }
+            response = textArray[0] === '1' ? 'CON Enter number of tickets:' : 'CON Injiza umubare w\'amatike:';
+            sendResponse(res, response);
+        });
+    } else if (textArray.length === 4) {
+        const numberOfTickets = parseInt(textArray[2], 10);
+        const routeIndex = parseInt(textArray[1], 10) - 1;
 
-        //FOR ENGLISH USERS
-    } else if (text == '2*1') {
-        candidate = 'Kamanzi Eric';
-        response = `CON Confirm to vote ${candidate}
-            1.Yes
-            2.No`;
-        sendResponse(res, response);
-    } else if (text == '2*2') {
-        candidate = 'Habimana Yves';
-        response = `CON Confirm to vote ${candidate}
-            1.Yes
-            2.No`;
-        sendResponse(res, response);
-    } else if (text == '2*3') {
-        candidate = 'Itangishaka Claude';
-        response = `CON Confirm to vote ${candidate}
-            1.Yes
-            2.No`;
-        sendResponse(res, response);
-    } else if (text == '2*4') {
-        candidate = 'Umwali Aliance';
-        response = `CON Confirm to vote ${candidate}
-            1.Yes
-            2.No`;
-        sendResponse(res, response);
+        db.query('SELECT * FROM routes', (err, results) => {
+            if (err || routeIndex >= results.length) {
+                response = 'END Invalid route selection. Please try again.';
+                sendResponse(res, response);
+                return;
+            }
+            const selectedRoute = results[routeIndex];
+            if (selectedRoute.available_seats < numberOfTickets) {
+                response = textArray[0] === '1'
+                    ? 'END Not enough available seats.'
+                    : 'END Ntabwo dufite amatike ahagije.';
+                sendResponse(res, response);
+                return;
+            }
+            response = textArray[0] === '1' ? 'CON Enter your name:' : 'CON Injiza izina ryawe:';
+            sendResponse(res, response);
+        });
+    } else if (textArray.length === 5) {
+        const numberOfTickets = parseInt(textArray[2], 10);
+        const routeIndex = parseInt(textArray[1], 10) - 1;
+        const userName = textArray[4];
 
-        //VOTING (YES) IN KINYARWANDA
-    } else if (text == '1*1*1') {  
-        language = 'kinyarwanda';
-        candidate = 'Kamanzi Eric';
-        checkVote(res, phoneNumber, language);
-    } else if (text == '1*2*1') {
-        language = 'kinyarwanda';
-        candidate = 'Habimana Yves';
-        checkVote(res, phoneNumber, language);
-    } else if (text == '1*3*1') {
-        language = 'kinyarwanda';
-        candidate = 'Itangishaka Claude';
-        checkVote(res, phoneNumber, language);
-    } else if (text == '1*4*1') {
-        language = 'kinyarwanda';
-        candidate = 'Umwali Aliance';
-        checkVote(res, phoneNumber, language);
+        db.query('SELECT * FROM routes', (err, results) => {
+            if (err || routeIndex >= results.length) {
+                response = 'END Invalid route selection. Please try again.';
+                sendResponse(res, response);
+                return;
+            }
 
-        //VOTING (YES) IN ENGLISH
-    } else if (text == '2*1*1') {
-        language = 'english';
-        candidate = 'Kamanzi Eric';
-        checkVote(res, phoneNumber, language);
-    } else if (text == '2*2*1') {
-        language = 'english';
-        candidate = 'Habimana Yves';
-        checkVote(res, phoneNumber, language);
-    } else if (text == '2*3*1') {
-        language = 'english';
-        candidate = 'Itangishaka Claude';
-        checkVote(res, phoneNumber, language);
-    } else if (text == '2*4*1') {
-        language = 'english';
-        candidate = 'Umwali Aliance';
-        checkVote(res, phoneNumber, language);
+            const selectedRoute = results[routeIndex];
+            const totalFare = selectedRoute.fare * numberOfTickets;
 
-        //IF USER SELECTED NO
-    } else if(text == '1*1*1*20' || text == '1*2*1*20' || text == '1*3*1*20' || text == '1*4*1*20'){
-        language = "kinyarwanda";
-        getVotes(res,language);
-    }else if(text == '2*1*1*20' || text == '2*2*1*20' || text == '2*3*1*20' || text == '2*4*1*20'){
-        language = "english";
-        getVotes(res,language);
-    }else if(text == '1*1*1*0' || text == '1*2*1*0' || text == '1*3*1*0' || text == '1*4*1*0'){
-        language = "kinyarwanda";
-        ext(res,language);
-    }else if(text == '2*1*1*0' || text == '2*2*1*0' || text == '2*3*1*0' || text == '2*4*1*0'){
-        language = "english";
-        ext(res,language);
-    } else if (text == '1*1*2' || text == '1*2*2' || text == '1*3*2' || text == '1*4*2') {
-        response = 'END Mwakoze Gukoresh iyi service ';
-        sendResponse(res, response);
-    } else if (text == '2*1*2' || text == '2*2*2' || text == '2*3*2' || text == '2*4*2') {
-        response = 'END Thank you for using our services';
-        sendResponse(res, response);
+            response = textArray[0] === '1'
+                ? `CON Ticket Information:\nRoute: ${selectedRoute.start_location} to ${selectedRoute.end_location}\nTickets: ${numberOfTickets}\nTotal Fare: ${totalFare}\nName: ${userName}\n1. Confirm\n2. Cancel`
+                : `CON Amakuru y'amatike:\nUrugendo: ${selectedRoute.start_location} to ${selectedRoute.end_location}\nAmatike: ${numberOfTickets}\nIgiciro cyose: ${totalFare}\nIzina: ${userName}\n1. Emeza\n2. Gahunda`;
+            sendResponse(res, response);
+        });
+    } else if (textArray.length === 6 && textArray[5] === '1') {
+        const numberOfTickets = parseInt(textArray[2], 10);
+        const routeIndex = parseInt(textArray[1], 10) - 1;
+        const userName = textArray[4];
+
+        db.query('SELECT * FROM routes', (err, results) => {
+            if (err || routeIndex >= results.length) {
+                response = 'END Invalid route selection. Please try again.';
+                sendResponse(res, response);
+                return;
+            }
+
+            const selectedRoute = results[routeIndex];
+            db.query(
+                'UPDATE routes SET available_seats = available_seats - ? WHERE id = ?',
+                [numberOfTickets, selectedRoute.id],
+                (err) => {
+                    if (err) {
+                        console.error('Error updating seats:', err.message);
+                        response = textArray[0] === '1'
+                            ? 'END Error processing purchase. Please try again later.'
+                            : 'END Ikosa ryo kugura amatike. Ongera ugerageze nyuma.';
+                        sendResponse(res, response);
+                        return;
+                    }
+                    db.query(
+                        'INSERT INTO tickets (user_id, route_id, number_of_tickets, total_fare, user_name) VALUES (?, ?, ?, ?, ?)',
+                        [phoneNumber, selectedRoute.id, numberOfTickets, selectedRoute.fare * numberOfTickets, userName],
+                        (err) => {
+                            if (err) {
+                                console.error('Error saving ticket:', err.message);
+                                response = textArray[0] === '1'
+                                    ? 'END Error processing purchase. Please try again later.'
+                                    : 'END Ikosa ryo kugura amatike. Ongera ugerageze nyuma.';
+                                sendResponse(res, response);
+                                return;
+                            }
+                            response = textArray[0] === '1'
+                                ? `END Ticket purchase confirmed. You have purchased ${numberOfTickets} tickets for ${selectedRoute.start_location} to ${selectedRoute.end_location}.`
+                                : `END Kugura itike byemejwe. Uguze amatike ${numberOfTickets} y'urugendo ${selectedRoute.start_location} to ${selectedRoute.end_location}.`;
+                            sendResponse(res, response);
+                        }
+                    );
+                }
+            );
+        });
     } else {
-        response = `END Invalid input!`;
+        response = 'END Invalid option.';
         sendResponse(res, response);
     }
 
-    function saveVote(res, sessionId, serviceCode, phoneNumber, text, candidate) {
-        const sql = 'INSERT INTO amatora (sessionId, serviceCode, phoneNumber, text, candidate) VALUES (?, ?, ?, ?, ?)';
-        db.query(sql, [sessionId, serviceCode, phoneNumber, text, candidate], (err, result) => {
-            if (err) {
-                console.error('Error saving vote:', err.message);
-                response = `END Error saving vote. Please try again.`;
-                sendResponse(res, response);
-                return; // Stop execution if there's an error
-            }
-            console.log('Vote saved successfully');
-            response = `END Voting ${candidate} successful!`;
-            sendResponse(res, response);
-        });
-    }
-
-    function checkVote(res, phoneNumber, language) {
-        const sql = 'SELECT * FROM amatora WHERE phoneNumber = ?';
-        db.query(sql, [phoneNumber], (err, result) => {
-            if (err) {
-                console.error('Error fetching data:', err.message);
-                response = `END Error checking vote. Please try again.`;
-                sendResponse(res, response);
-                return; // Stop execution if there's an error
-            }
-            if (result.length > 0) {
-                response = language === 'kinyarwanda'
-                    ? `CON Wamaze gutora! Hitamo:
-                    20. Kureba amajwi
-                    0. Sohoka`
-                    : `CON You have already voted! Choose:
-                    20. View votes
-                    0. Exit`;
-                sendResponse(res, response);
-            } else {
-                saveVote(res, sessionId, serviceCode, phoneNumber, text, candidate);
-            }
-            console.log('Query executed successfully!');
-        });
-    }
-
-    function getVotes(res,language) {
-        const sql = 'SELECT candidate, COUNT(*) AS repetition_times FROM amatora GROUP BY candidate';
-        db.query(sql, (err, results) => {
-            if (err) {
-                console.error('Error fetching votes:', err.message);
-                response = `END Error fetching votes. Please try again.`;
-                sendResponse(res, response);
-                return; // Stop execution if there's an error
-            }
-    
-            let votesResponse = '';
-            let counter = 1;
-    
-            if (results.length > 0) {
-                results.forEach(row => {
-                    const candidate = row.candidate;
-                    const votes = row.repetition_times;
-                    votesResponse += `${counter}. ${candidate}: ${votes}\n`;
-                    counter++;
-                });
-            } else {
-                votesResponse = 'No votes recorded yet.';
-            }
-    
-            // Send the response
-            response = language === 'kinyarwanda'
-                ? `END Amajwi:\n${votesResponse}`
-                : `END Votes:\n${votesResponse}`;
-            sendResponse(res, response);
-        });
-    }
-    
-    function ext(res,language){
-        response = language === 'kinyarwanda'
-        ? `END Mwakoze gukoresha iyi serivisi`
-        : `END Thank you for using our services`;
-    sendResponse(res, response);        
-    }
-    
     function sendResponse(res, response) {
-        res.set('Content-Type: text/plain');
+        res.set('Content-Type', 'text/plain');
         res.send(response);
     }
 });
