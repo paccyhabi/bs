@@ -7,6 +7,9 @@ module.exports = (sequelize, DataTypes) => {
         quantity: {
             type: DataTypes.INTEGER,
             allowNull:false 
+        },
+        amount: {
+            type: DataTypes.DECIMAL(10,2),
         }
     });
     return Ticket;

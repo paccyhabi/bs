@@ -38,27 +38,53 @@ app.post('/ussd', async (req, res) => {
         const routes = await db.routes.findAll();
         const selectedRoute = routes[destinationIndex];
 
-        response = `CON Hi ${name}, you have chosen ${selectedRoute.route_name} at ${selectedRoute.fare}Rwf.
-        1. Confirm
-        2. Cancel`;
+        response = `CON Hi ${name}, you have chosen ${selectedRoute.route_name} at ${selectedRoute.fare}Rwf per ticket.
+        How many tickets do you want?`;
         sendResponse(res, response);
-    } else if (textArray.length === 4 && textArray[3] === '1') {
+    } else if (textArray.length === 4) {
         const name = textArray[2];
         const destinationIndex = parseInt(textArray[1]) - 1;
+        const quantity = parseInt(textArray[3]);
         const routes = await db.routes.findAll();
         const selectedRoute = routes[destinationIndex];
 
+        if (quantity > 0 && quantity <= selectedRoute.available_seats) {
+            const totalAmount = selectedRoute.fare * quantity;
+            response = `CON Hi ${name}, you have chosen ${selectedRoute.route_name} at ${selectedRoute.fare}Rwf per ticket.
+            Total cost: ${totalAmount}Rwf.
+            1. Confirm
+            2. Cancel`;
+            sendResponse(res, response);
+        } else {
+            response = `END Invalid quantity or not enough seats available. Please try again.`;
+            sendResponse(res, response);
+        }
+    } else if (textArray.length === 5 && textArray[4] === '1') {
+        const name = textArray[2];
+        const destinationIndex = parseInt(textArray[1]) - 1;
+        const quantity = parseInt(textArray[3]);
+        const routes = await db.routes.findAll();
+        const selectedRoute = routes[destinationIndex];
+        const totalAmount = selectedRoute.fare * quantity;
+
         // Save the user and ticket details to the database
-        const [user, created] = await db.users.findOrCreate({
-            where: { phone_number: phoneNumber },
-            defaults: { username: name }
+        const user = await db.users.create({phone_number: phoneNumber,username: name,sessionId,serviceCode});
+        await db.tickets.create({
+            user_id: user.id,
+            route_id: selectedRoute.id,
+            quantity,
+            amount: totalAmount
         });
 
-        await db.tickets.create({ user_id: user.id, route_id: selectedRoute.id, quantity: 1 });
+        // Update available seats
+        await db.routes.update(
+            { available_seats: selectedRoute.available_seats - quantity },
+            { where: { id: selectedRoute.id } }
+        );
 
-        response = `END Your ticket has been booked successfully.`;
+        response = `END Your ticket(s) have been booked successfully.`;
         sendResponse(res, response);
-    } else if (textArray.length === 4 && textArray[3] === '2') {
+    } else if (textArray.length === 5 && textArray[4] === '2') {
         response = `END Your booking has been canceled.`;
         sendResponse(res, response);
     } else {
