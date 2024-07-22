@@ -1,12 +1,11 @@
 const express = require('express');
 const bodyParser = require('body-parser');
-const db = require('./models'); // Ensure this points to your database models
+const db = require('./models'); // Ensure this points to your Sequelize models
 const app = express();
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
 
-// USSD Route
-app.post('/ussd', (req, res) => {
+app.post('/ussd', async (req, res) => {
     const { sessionId, serviceCode, phoneNumber, text } = req.body;
 
     let response = "";
@@ -17,21 +16,16 @@ app.post('/ussd', (req, res) => {
         1. Buy tickets`;
         sendResponse(res, response);
     } else if (text === '1') {
-        response = `CON Our destinations:
-        1. Kigali-Nyamata 1000Rwf
-        2. Gicumbi-Nyagatare 1200Rwf
-        3. Musanze-Rubavu 1500Rwf
-        4. Kigali-Huye 2000Rwf
-        5. Rusizi-Nyamasheke 2500Rwf
-        6. Kigali-Muhanga 1000Rwf
-        7. Karongi-Rutsiro 1200Rwf
-        8. Kigali-Rwamagana 900Rwf
-        9. Gatsibo-Kayonza 1100Rwf
-        10. Ngoma-Kirehe 1300Rwf`;
-        sendResponse(res, response);
-    } else if (text.startsWith('1*')) {
-        const destinationIndex = textArray[1];
-        if (destinationIndex >= 1 && destinationIndex <= 10) {
+        const routes = await db.routes.findAll();
+        let routesMenu = 'CON Our destinations:\n';
+        routes.forEach((route, index) => {
+            routesMenu += `${index + 1}. ${route.route_name} ${route.fare}Rwf\n`;
+        });
+        sendResponse(res, routesMenu);
+    } else if (textArray.length === 2) {
+        const destinationIndex = parseInt(textArray[1]) - 1;
+        const routes = await db.routes.findAll();
+        if (destinationIndex >= 0 && destinationIndex < routes.length) {
             response = `CON Enter your name:`;
             sendResponse(res, response);
         } else {
@@ -40,40 +34,28 @@ app.post('/ussd', (req, res) => {
         }
     } else if (textArray.length === 3) {
         const name = textArray[2];
-        const destinations = [
-            'Kigali-Nyamata',
-            'Gicumbi-Nyagatare',
-            'Musanze-Rubavu',
-            'Kigali-Huye',
-            'Rusizi-Nyamasheke',
-            'Kigali-Muhanga',
-            'Karongi-Rutsiro',
-            'Kigali-Rwamagana',
-            'Gatsibo-Kayonza',
-            'Ngoma-Kirehe'
-        ];
-        const prices = [
-            '1000Rwf',
-            '1200Rwf',
-            '1500Rwf',
-            '2000Rwf',
-            '2500Rwf',
-            '1000Rwf',
-            '1200Rwf',
-            '900Rwf',
-            '1100Rwf',
-            '1300Rwf'
-        ];
-
         const destinationIndex = parseInt(textArray[1]) - 1;
-        const destination = destinations[destinationIndex];
-        const price = prices[destinationIndex];
+        const routes = await db.routes.findAll();
+        const selectedRoute = routes[destinationIndex];
 
-        response = `CON Hi ${name}, you have chosen ${destination} at ${price}.
+        response = `CON Hi ${name}, you have chosen ${selectedRoute.route_name} at ${selectedRoute.fare}Rwf.
         1. Confirm
         2. Cancel`;
         sendResponse(res, response);
     } else if (textArray.length === 4 && textArray[3] === '1') {
+        const name = textArray[2];
+        const destinationIndex = parseInt(textArray[1]) - 1;
+        const routes = await db.routes.findAll();
+        const selectedRoute = routes[destinationIndex];
+
+        // Save the user and ticket details to the database
+        const [user, created] = await db.users.findOrCreate({
+            where: { phone_number: phoneNumber },
+            defaults: { username: name }
+        });
+
+        await db.tickets.create({ user_id: user.id, route_id: selectedRoute.id, quantity: 1 });
+
         response = `END Your ticket has been booked successfully.`;
         sendResponse(res, response);
     } else if (textArray.length === 4 && textArray[3] === '2') {

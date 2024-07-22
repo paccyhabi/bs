@@ -1,10 +1,6 @@
 module.exports = (sequelize, DataTypes) => {
   const Route = sequelize.define('route', {
-      start_location: {
-          type: DataTypes.STRING,
-          allowNull: false
-      },
-      end_location: {
+      route_name: {
           type: DataTypes.STRING,
           allowNull: false
       },

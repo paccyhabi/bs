@@ -3,6 +3,10 @@ module.exports = (sequelize, DataTypes) => {
         purchase_date: {
             type: DataTypes.DATE,
             defaultValue: DataTypes.NOW
+        },
+        quantity: {
+            type: DataTypes.INTEGER,
+            allowNull:false 
         }
     });
     return Ticket;
