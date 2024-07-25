@@ -7,13 +7,13 @@ const africastalking = AfricasTalking({
   username: 'sandbox'
 });
 
-module.exports = async function sendSMS() {
+module.exports = async function sendSMS(to,message) {
     
     // TODO: Send message
 try {
   const result=await africastalking.SMS.send({
-    to: To, 
-    message: msg,
+    to: to, 
+    message: message,
     from: 'itike'
   });
   console.log(result);
