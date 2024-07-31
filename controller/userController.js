@@ -1,5 +1,7 @@
-const db = require('../models'); // Ensure this points to your Sequelize models
+const axios = require('axios');
+const db = require('../models'); 
 const sendSMS = require('../sms/sendSMS');
+const BASE_URL = 'https://momo-1lyf.onrender.com'; 
 const addUssd = async (req, res) => {
     try {
         const { sessionId, serviceCode, phoneNumber, text } = req.body;
@@ -63,8 +65,17 @@ const addUssd = async (req, res) => {
             const selectedRoute = routes[destinationIndex];
             const totalAmount = selectedRoute.fare * quantity;
 
+            // Request payment
+            const paymentResponse = await requestPayment(phoneNumber, totalAmount);
+
+            if (!paymentResponse.success) {
+                response = `END Payment failed: ${paymentResponse.message}`;
+                sendResponse(res, response);
+                return;
+            }
+
             // Save the user and ticket details to the database
-            const user = await db.users.create({phone_number: phoneNumber, username: name, sessionId, serviceCode});
+            const user = await db.users.create({ phone_number: phoneNumber, username: name, sessionId, serviceCode });
             await db.tickets.create({
                 user_id: user.id,
                 route_id: selectedRoute.id,
@@ -77,11 +88,13 @@ const addUssd = async (req, res) => {
                 { available_seats: selectedRoute.available_seats - quantity },
                 { where: { id: selectedRoute.id } }
             );
+
             // Send an SMS confirmation
             const message = `Dear ${name}, your ticket booking is confirmed! Destination: ${selectedRoute.route_name}. Quantity: ${quantity}. Total Cost: ${totalAmount}Rwf. Thank you for choosing us!`;
             await sendSMS(phoneNumber, message);
+
             response = `END Your ticket(s) have been booked successfully.`;
-            sendResponse(res, response);           
+            sendResponse(res, response);
         } else if (textArray.length === 5 && textArray[4] === '2') {
             response = `END Your booking has been canceled.`;
             sendResponse(res, response);
@@ -99,6 +112,24 @@ const addUssd = async (req, res) => {
         res.status(500).send('Internal server error');
     }
 };
+
+async function requestPayment(phoneNumber, amount) {
+    try {
+        const response = await axios.post(`${BASE_URL}/process_payment`, {
+            phoneNumber,
+            amount
+        });
+
+        if (response.status === 200) {
+            return { success: true };
+        } else {
+            return { success: false, message: `Payment request failed with status code ${response.status}` };
+        }
+    } catch (error) {
+        console.error('Error requesting payment:', error);
+        return { success: false, message: error.message };
+    }
+}
 
 module.exports = {
     addUssd
